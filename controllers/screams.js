@@ -1,22 +1,41 @@
 const { db, admin } = require("../util/firebase-admin");
 
 exports.getScreams = (req, res, next) => {
-  let { page = 1, numPerPage = 10 } = req.query;
-  page = +page;
+  let { lastCreatedAt, numPerPage = 10 } = req.query;
   numPerPage = +numPerPage;
-  let totalScreamsCount;
-  db.collection("screams")
-    .orderBy("createdAt", "desc")
-    .get()
-    .then((snapshot) => {
-      totalScreamsCount = snapshot.size;
-      return db
-        .collection("screams")
-        .orderBy("createdAt", "desc")
-        .offset((page - 1) * numPerPage)
-        .limit(numPerPage)
-        .get();
-    })
+
+  let hasNextPage = false;
+  let getScreamsPromise;
+  if (lastCreatedAt) {
+    getScreamsPromise = db
+      .collection("screams")
+      .orderBy("createdAt", "desc")
+      .startAfter(lastCreatedAt)
+      .get()
+      .then((snapshot) => {
+        hasNextPage = snapshot.size - numPerPage > 0;
+        return db
+          .collection("screams")
+          .orderBy("createdAt", "desc")
+          .startAfter(lastCreatedAt)
+          .limit(numPerPage)
+          .get();
+      });
+  } else {
+    getScreamsPromise = db
+      .collection("screams")
+      .orderBy("createdAt", "desc")
+      .get()
+      .then((snapshot) => {
+        hasNextPage = snapshot.size - numPerPage > 0;
+        return db
+          .collection("screams")
+          .orderBy("createdAt", "desc")
+          .limit(numPerPage)
+          .get();
+      });
+  }
+  getScreamsPromise
     .then((snapshot) => {
       let screams = [];
       snapshot.forEach((doc) => {
@@ -25,7 +44,7 @@ exports.getScreams = (req, res, next) => {
           ...doc.data(),
         });
       });
-      res.json({ screams, totalScreamsCount });
+      res.json({ screams, hasNextPage });
     })
     .catch((err) => {
       console.log(err);
