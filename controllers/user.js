@@ -4,7 +4,6 @@ const firebase = require("firebase");
 const { Readable } = require("stream");
 
 const Busboy = require("busboy");
-const { throws } = require("assert");
 const config = {
   apiKey: "AIzaSyASt4KRKlOeJrZJbo8bl8TpYQ_zX7NDb1Y",
   authDomain: "social-app-655bc.firebaseapp.com",
@@ -102,7 +101,7 @@ exports.uploadPhoto = (req, res, next) => {
         return next(error);
       }
       originalFileName = filename;
-      blob = bucket.file(`${Date.now()}-${originalFileName}`);
+      blob = bucket.file(`profile/${Date.now()}-${originalFileName}`);
       const blobWriter = blob.createWriteStream({
         metadata: {
           contentType: mimetype,
@@ -112,7 +111,7 @@ exports.uploadPhoto = (req, res, next) => {
         console.log("finish blobwriter");
         const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${
           bucket.name
-        }/o/${encodeURI(blob.name)}?alt=media`;
+        }/o/${encodeURI(blob.name).replace("/", "%2F")}?alt=media`;
         try {
           await db
             .doc(`/users/${req.user.userName}`)

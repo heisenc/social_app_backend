@@ -1,4 +1,5 @@
 const { db, admin } = require("../util/firebase-admin");
+const Busboy = require("busboy");
 
 exports.getScreams = (req, res, next) => {
   let { lastCreatedAt, numPerPage = 10 } = req.query;
@@ -85,32 +86,112 @@ exports.getScream = (req, res, next) => {
 };
 
 exports.postAddScream = (req, res, next) => {
-  const { body } = req.body;
-  if (!body || !body.trim()) {
-    const error = new Error("scream body can't be empty");
-    error.status = 400;
-    return next(error);
-  }
-  const newScream = {
-    body,
-    userName: req.user.userName,
-    userImage: req.user.imageUrl,
-    createdAt: new Date().toISOString(),
-    likeCount: 0,
-    commentCount: 0,
-  };
+  const busboy = new Busboy({ headers: req.headers });
+  const bucket = admin.storage().bucket("social-app-655bc.appspot.com");
+  let blob;
 
-  db.collection("screams")
-    .add(newScream)
-    .then((doc) => {
-      newScream.screamId = doc.id;
-      res.json(newScream);
-    })
-    .catch((err) => {
-      console.log(err);
-      err.status = 500;
-      return next(err);
+  const uploadImagePromise = new Promise((resolve, reject) => {
+    busboy.on("file", (fieldname, file, filename, encoding, mimetype) => {
+      if (mimetype !== "image/jpeg" && mimetype !== "image/png") {
+        const error = new Error("Wrong file type submitted");
+        error.status = 400;
+        return reject(error);
+      }
+      blob = bucket.file(`scream/${Date.now()}-${filename}`);
+      const blobWriter = blob.createWriteStream({
+        metadata: {
+          contentType: mimetype,
+        },
+      });
+      blobWriter.on("finish", async () => {
+        console.log("finish blobwriter");
+        const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${
+          bucket.name
+        }/o/${encodeURI(blob.name).replace("/", "%2F")}?alt=media`;
+        resolve(publicUrl);
+      });
+      file.pipe(blobWriter);
     });
+  });
+
+  busboy.on(
+    "field",
+    function (
+      fieldname,
+      val,
+      fieldnameTruncated,
+      valTruncated,
+      encoding,
+      mimetype
+    ) {
+      console.log("Field [" + fieldname + "]: value: " + val);
+      if (fieldname === "body") {
+        req.body.body = val;
+      }
+    }
+  );
+
+  busboy
+    .on("finish", () => {
+      console.log("finished parsing form");
+      console.log(req.body);
+      const { body } = req.body;
+      if (!body || !body.trim()) {
+        const error = new Error("scream body can't be empty");
+        error.status = 400;
+        return next(error);
+      }
+      const currentTime = new Date().toISOString();
+      const newScream = {
+        body,
+        userName: req.user.userName,
+        userImage: req.user.imageUrl,
+        createdAt: currentTime,
+        likeCount: 0,
+        updatedAt: currentTime,
+        commentCount: 0,
+      };
+
+      if (!blob) {
+        console.log("No image provided");
+        return db
+          .collection("screams")
+          .add(newScream)
+          .then((doc) => {
+            newScream.screamId = doc.id;
+            res.json(newScream);
+          })
+          .catch((err) => {
+            console.log(err);
+            err.status = 500;
+            return next(err);
+          });
+      }
+
+      uploadImagePromise
+        .then((publicUrl) => {
+          newScream.image = publicUrl;
+          db.collection("screams")
+            .add(newScream)
+            .then((doc) => {
+              newScream.screamId = doc.id;
+              res.json(newScream);
+            })
+            .catch((err) => {
+              console.log(err);
+              err.status = 500;
+              return next(err);
+            });
+        })
+        .catch((err) => next(err));
+    })
+    .on("error", (err) => {
+      console.log(err);
+      const error = new Error("something went wrong with posting scream");
+      error.status = 500;
+      return next(error);
+    });
+  busboy.end(req.rawBody);
 };
 
 exports.deleteScream = (req, res, next) => {
@@ -173,6 +254,7 @@ exports.postComment = (req, res, next) => {
       newCommentData.commentId = commentRef.id;
 
       batch.update(screamRef, {
+        updatedAt: newCommentData.createdAt,
         commentCount: admin.firestore.FieldValue.increment(1),
       });
       batch.set(commentRef, newCommentData);

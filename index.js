@@ -130,8 +130,11 @@ exports.onUserImageChange = functions
     }
     const bucket = admin.storage().bucket();
     const regex = /[^/]+(?=\?alt=media)/; // or /(?:[^/](?!\/))+(?=\?alt=media)/
-    const filePath = change.before.data().imageUrl.match(regex)[0];
-    console.log(`deleting ${filePath}`);
+    const filePath = change.before
+      .data()
+      .imageUrl.match(regex)[0]
+      .replace("%2F", "/");
+    console.log(`deleting ${filePath} image`);
     bucket
       .file(filePath)
       .delete()
@@ -219,4 +222,20 @@ exports.onScreamDelete = functions
         });
       })
       .catch(console.log);
+    const bucket = admin.storage().bucket();
+    const scream = snapshot.data();
+    const { image: imageUrl } = scream;
+    console.log(scream, imageUrl);
+    if (imageUrl) {
+      const regex = /[^/]+(?=\?alt=media)/;
+      const filePath = imageUrl.match(regex)[0].replace("%2F", "/");
+      console.log(`deleting image ${filePath}`);
+      bucket
+        .file(filePath)
+        .delete()
+        .then(() => {
+          console.log(`delete old image ${filePath} success`);
+        })
+        .catch(console.log);
+    }
   });
