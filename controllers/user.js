@@ -231,6 +231,7 @@ exports.getOwnUserDetail = async (req, res, next) => {
 exports.getUserDetail = async (req, res, next) => {
   const userData = {};
   const { userName } = req.params;
+  const calhasNextPage = (size) => size - DEFAULT_NUMBER_PER_PAGE > 0;
   try {
     const userDoc = await db.doc(`/users/${userName}`).get();
     if (!userDoc.exists) {
@@ -239,14 +240,21 @@ exports.getUserDetail = async (req, res, next) => {
       return next(error);
     }
     userData.user = userDoc.data();
-    const screamSnapshot = await db
+    const screamsLengthSnapshot = await db
+      .collection("screams")
+      .where("userName", "==", userName)
+      .orderBy("createdAt", "desc")
+      .get();
+    const hasNextPage = calhasNextPage(screamsLengthSnapshot.size);
+    userData.hasNextPage = hasNextPage;
+    const screamsSnapshot = await db
       .collection("screams")
       .where("userName", "==", userName)
       .orderBy("createdAt", "desc")
       .limit(DEFAULT_NUMBER_PER_PAGE)
       .get();
     userData.screams = [];
-    screamSnapshot.forEach((doc) => {
+    screamsSnapshot.forEach((doc) => {
       userData.screams.push({ ...doc.data(), screamId: doc.id });
     });
     return res.json(userData);
