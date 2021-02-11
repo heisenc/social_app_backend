@@ -1,40 +1,80 @@
 const { db, admin } = require("../util/firebase-admin");
 const Busboy = require("busboy");
+const { DEFAULT_NUMBER_PER_PAGE } = require("../util/constant");
 
 exports.getScreams = (req, res, next) => {
-  let { lastCreatedAt, numPerPage = 10 } = req.query;
+  let {
+    lastCreatedAt,
+    numPerPage = DEFAULT_NUMBER_PER_PAGE,
+    userName,
+  } = req.query;
   numPerPage = +numPerPage;
 
   let hasNextPage = false;
   let getScreamsPromise;
+
+  const calhasNextPage = (size) => size - numPerPage > 0;
+
   if (lastCreatedAt) {
-    getScreamsPromise = db
-      .collection("screams")
-      .orderBy("createdAt", "desc")
-      .startAfter(lastCreatedAt)
-      .get()
-      .then((snapshot) => {
-        hasNextPage = snapshot.size - numPerPage > 0;
-        return db
+    getScreamsPromise = !userName
+      ? db
           .collection("screams")
           .orderBy("createdAt", "desc")
           .startAfter(lastCreatedAt)
-          .limit(numPerPage)
-          .get();
-      });
+          .get()
+          .then((snapshot) => {
+            hasNextPage = calhasNextPage(snapshot.size);
+            return db
+              .collection("screams")
+              .orderBy("createdAt", "desc")
+              .startAfter(lastCreatedAt)
+              .limit(numPerPage)
+              .get();
+          })
+      : db
+          .collection("screams")
+          .where("userName", "==", userName)
+          .orderBy("createdAt", "desc")
+          .startAfter(lastCreatedAt)
+          .get()
+          .then((snapshot) => {
+            hasNextPage = calhasNextPage(snapshot.size);
+            return db
+              .collection("screams")
+              .where("userName", "==", userName)
+              .orderBy("createdAt", "desc")
+              .startAfter(lastCreatedAt)
+              .limit(numPerPage)
+              .get();
+          });
   } else {
-    getScreamsPromise = db
-      .collection("screams")
-      .orderBy("createdAt", "desc")
-      .get()
-      .then((snapshot) => {
-        hasNextPage = snapshot.size - numPerPage > 0;
-        return db
+    getScreamsPromise = !userName
+      ? db
           .collection("screams")
           .orderBy("createdAt", "desc")
-          .limit(numPerPage)
-          .get();
-      });
+          .get()
+          .then((snapshot) => {
+            hasNextPage = calhasNextPage(snapshot.size);
+            return db
+              .collection("screams")
+              .orderBy("createdAt", "desc")
+              .limit(numPerPage)
+              .get();
+          })
+      : db
+          .collection("screams")
+          .where("userName", "==", userName)
+          .orderBy("createdAt", "desc")
+          .get()
+          .then((snapshot) => {
+            hasNextPage = calhasNextPage(snapshot.size);
+            return db
+              .collection("screams")
+              .where("userName", "==", userName)
+              .orderBy("createdAt", "desc")
+              .limit(numPerPage)
+              .get();
+          });
   }
   getScreamsPromise
     .then((snapshot) => {

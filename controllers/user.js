@@ -2,6 +2,7 @@ const { db, admin } = require("../util/firebase-admin");
 const { validationResult } = require("express-validator");
 const firebase = require("firebase");
 const { Readable } = require("stream");
+const { DEFAULT_NUMBER_PER_PAGE } = require("../util/constant");
 
 const Busboy = require("busboy");
 const config = {
@@ -242,6 +243,7 @@ exports.getUserDetail = async (req, res, next) => {
       .collection("screams")
       .where("userName", "==", userName)
       .orderBy("createdAt", "desc")
+      .limit(DEFAULT_NUMBER_PER_PAGE)
       .get();
     userData.screams = [];
     screamSnapshot.forEach((doc) => {
